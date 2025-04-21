@@ -3,7 +3,7 @@ from scipy.spatial.distance import pdist, squareform
 from scipy.linalg import orthogonal_procrustes as procrustes
 import numpy as np
 
-def _sample_by_topic(dataset_name, topic_column, target_topic, sample_size=100, seed=42, test=False, n_attempts=5):
+def _sample_by_topic(dataset_name, topic_column, target_topic, sample_size=100, seed=42, cache_dir=None, test=False, n_attempts=5):
     """
     Sample rows from a HuggingFace dataset for a specific topic.
     
@@ -23,7 +23,7 @@ def _sample_by_topic(dataset_name, topic_column, target_topic, sample_size=100, 
     success=False
     while n_attempted < n_attempts and not success:
         try:
-            dataset = load_dataset(dataset_name)
+            dataset = load_dataset(dataset_name, cache_dir=cache_dir)
             success=True
         except:
             n_attempted+=1
@@ -66,7 +66,7 @@ def _merge_datasets(datasets_list, shuffle=True, seed=42):
     return merged_dataset
 
 
-def get_dataset_by_pi(pi, dataset_name, topic_column, target_topics, sample_size=100, seed=42, test=False):
+def get_dataset_by_pi(pi, dataset_name, topic_column, target_topics, sample_size=100, seed=42, cache_dir=None, test=False):
     assert len(target_topics) == len(pi)
     n_topics = len(target_topics)
     
@@ -77,13 +77,13 @@ def get_dataset_by_pi(pi, dataset_name, topic_column, target_topics, sample_size
     for i in np.random.choice(range(n_topics), size=remainder):
         dataset_size[i] += 1
     
-    datasets = [_sample_by_topic(dataset_name, topic_column, tt, dataset_size[i], seed, test) for i, tt in enumerate(target_topics)]
+    datasets = [_sample_by_topic(dataset_name, topic_column, tt, dataset_size[i], seed, cache_dir, test) for i, tt in enumerate(target_topics)]
     
     return _merge_datasets(datasets)
 
 
-def get_query_set(question_key, pi, dataset_name, topic_column, target_topics, sample_size=100, seed=42):
-    dataset = get_dataset_by_pi(pi, dataset_name, topic_column, target_topics, sample_size, seed, test=True)
+def get_query_set(question_key, pi, dataset_name, topic_column, target_topics, sample_size=100, seed=42, cache_dir=None):
+    dataset = get_dataset_by_pi(pi, dataset_name, topic_column, target_topics, sample_size, seed, cache_dir=cache_dir, test=True)
     
     return dataset[question_key]
 

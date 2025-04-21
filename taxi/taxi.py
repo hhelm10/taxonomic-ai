@@ -117,8 +117,8 @@ def get_outputs(model, tokenizer, user_content_list, max_length=32, match_n_inpu
         outputs = model.generate(
             **inputs,
             max_new_tokens=max_length,
-            do_sample=True,
-            temperature=0.5,
+            do_sample=False,
+            temperature=0,
             pad_token_id=tokenizer.eos_token_id,
             output_scores=True,
             return_dict_in_generate=True
