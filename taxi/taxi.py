@@ -43,7 +43,7 @@ def get_lora_matrices(model, target_modules = ["q_proj","k_proj","v_proj"]):
     if 'base_model' in model._modules:
         layers = model._modules['base_model']._modules['model']._modules['model']._modules['layers']
     else:
-        model._modules['model']._modules['layers']
+        layers = model._modules['model']._modules['layers']
 
     lora_matrices = []
 
