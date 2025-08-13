@@ -85,11 +85,10 @@ def get_structural_geometry(true_geometry, lora_matrices):
     structure_geometry = ClassicalMDS(n_components=true_geometry.shape[1]).fit_transform(distance_structure)
     return _rotate_geometry(true_geometry, structure_geometry)
 
-
-#- Functional and behavioral geometry
-def get_outputs(model, tokenizer, user_content_list, max_length=32, match_n_input_tokens=False):
+#- Behavioral geometry
+def get_outputs(model, tokenizer, user_content_list, generation_kwargs = {'max_new_tokens': 32, 'do_sample': False, 'temperature': 0, 'num_return_sequences': 1}):
     '''
-    Returns responses and normed average last hidden states.
+    Returns responses.
     '''
     
     message_list = []
@@ -116,32 +115,71 @@ def get_outputs(model, tokenizer, user_content_list, max_length=32, match_n_inpu
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=max_length,
-            do_sample=False,
-            temperature=0,
+            **generation_kwargs,
             pad_token_id=tokenizer.eos_token_id,
-            output_scores=True,
             return_dict_in_generate=True
         )
         inputs.to('cpu')
-        undressed_inputs = tokenizer(user_content_list, return_tensors="pt", 
-                   padding=True,
-                   padding_side='left',
-                   max_length=64).to('cuda:0')
         
-        processed_inputs = model(undressed_inputs['input_ids'], output_hidden_states=True)
-        undressed_inputs.to('cpu')
+    return _get_responses(tokenizer, outputs, inputs)
 
-    # Extract the last hidden state
-    last_hidden_states = processed_inputs.hidden_states[-1].to('cpu')
-            
-    if match_n_input_tokens:
-        n_tokens_list = undressed_inputs['attention_mask'].sum(dim=-1)
-    else:
-        n_tokens_list = None
+
+#- Functional and behavioral geometry
+# def get_outputs(model, tokenizer, user_content_list, max_length=32, match_n_input_tokens=False):
+#     '''
+#     Returns responses and normed average last hidden states.
+#     '''
     
-    responses = _get_responses(tokenizer, outputs, inputs, n_tokens_list)
-    return responses, _get_normed_average_last_state(last_hidden_states, undressed_inputs)
+#     message_list = []
+#     system_prompt = 'You are a helpful assistant.'
+
+#     for user_content in user_content_list:
+#         messages = [
+#             {"role": "system", "content": "You are a helpful assistant."},
+#             {"role": "user", "content": user_content},
+#             {"role": "assistant", "content": ""}
+#         ]
+
+#         message_list.append(messages)
+
+#     formatted_text = tokenizer.apply_chat_template(message_list, add_generation_prompt=True, tokenize=False)
+#     inputs = tokenizer(formatted_text, 
+#                        return_tensors="pt", 
+#                        padding=True,
+#                        padding_side='left',
+#                        max_length=64
+#     )
+
+#     inputs.to('cuda:0')
+#     with torch.no_grad():
+#         outputs = model.generate(
+#             **inputs,
+#             max_new_tokens=max_length,
+#             do_sample=False,
+#             temperature=0,
+#             pad_token_id=tokenizer.eos_token_id,
+#             output_scores=True,
+#             return_dict_in_generate=True
+#         )
+#         inputs.to('cpu')
+#         undressed_inputs = tokenizer(user_content_list, return_tensors="pt", 
+#                    padding=True,
+#                    padding_side='left',
+#                    max_length=64).to('cuda:0')
+        
+#         processed_inputs = model(undressed_inputs['input_ids'], output_hidden_states=True)
+#         undressed_inputs.to('cpu')
+
+#     # Extract the last hidden state
+#     last_hidden_states = processed_inputs.hidden_states[-1].to('cpu')
+            
+#     if match_n_input_tokens:
+#         n_tokens_list = undressed_inputs['attention_mask'].sum(dim=-1)
+#     else:
+#         n_tokens_list = None
+    
+#     responses = _get_responses(tokenizer, outputs, inputs, n_tokens_list)
+#     return responses, _get_normed_average_last_state(last_hidden_states, undressed_inputs)
 
 
 def _get_normed_average_last_state(last_hidden_states, inputs):
@@ -201,10 +239,23 @@ def get_behavioral_geometry(true_geometry, responses, embedding_model):
     Returns the geometry estimated via DKPS, rotated to fit true_geometry.
     '''
     embeddings = {}
-    
+
     for vertex in responses:
-        embeddings[vertex] = embedding_model.encode(responses[vertex])
-        
+        if isinstance(responses[vertex][0], list):
+            r = len(responses[vertex][0])
+            _responses = []
+            for response_list in responses[vertex]:
+                #- this assertion is only for convenience. response lists do not need to be the same length; just make indexing more annoying
+                ### if response lists are not the same length, be sure to project the average back to the sphere.
+                assert r == len(response_list)
+                _responses += response_list
+            _embeddings = embedding_model.encode(_responses, normalize_embeddings=True)
+            embeddings[vertex] = np.array([np.mean(_embeddings[i*r: (i+1)*r], axis=0) for i in range(len(responses[vertex]))])
+            # embeddings[vertex] /= np.linalg.norm(embeddings[vertex], axis=1, keepdims=True)
+            
+        else:
+            embeddings[vertex] = embedding_model.encode(responses[vertex], normalize_embeddings=True)
+            
     dist_behavioral = np.zeros((len(embeddings), len(embeddings)))
     
     vertices = list(embeddings.keys())

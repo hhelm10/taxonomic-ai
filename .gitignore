@@ -1,4 +1,5 @@
 experiments/hayden/models
+experiments/bstadt/models
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
